@@ -1,0 +1,33 @@
+{
+  "properties": {
+    "prop1": {
+      "title": "sub property title in base.json"
+    },
+    "prop2": {
+      "__reference__": {},
+      "title": "sub property title in base.json"
+    },
+    "prop3": {
+      "__reference__": {},
+      "properties": {
+        "prop1": {
+          "title": "sub property title in other.json"
+        },
+        "prop2": {
+          "__reference__": {},
+          "title": "sub property title in other.json"
+        }
+      },
+      "title": "title from url"
+    },
+    "prop4": {
+      "__reference__": {},
+      "title": "sub property title in other.json"
+    },
+    "prop5": {
+      "__reference__": {},
+      "title": "sub property title in other.json"
+    }
+  },
+  "title": "title from file"
+}

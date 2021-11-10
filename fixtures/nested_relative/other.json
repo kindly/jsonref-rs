@@ -1,0 +1,5 @@
+{"title": "title from url",
+ "properties": {"prop1": {"title": "sub property title in other.json"},
+                "prop2": {"$ref": "#/properties/prop1"}
+               }
+}

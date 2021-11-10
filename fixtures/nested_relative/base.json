@@ -1,0 +1,8 @@
+{"title": "title from file",
+ "properties": {"prop1": {"title": "sub property title in base.json"},
+                "prop2": {"$ref": "#/properties/prop1"},
+                "prop3": {"$ref": "other.json"},
+                "prop4": {"$ref": "other.json#/properties/prop1"},
+                "prop5": {"$ref": "other.json#/properties/prop2"}
+               }
+}
