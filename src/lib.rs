@@ -8,7 +8,6 @@
 //! * Passing to tools that create fake JSON data from the schema.
 //! * Passing the schema to form generation tools.
 //!
-//! This crate is intended to do this for you.
 //!
 //! Example:
 //! ```

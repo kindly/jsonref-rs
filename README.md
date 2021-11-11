@@ -8,11 +8,9 @@ it is sometimes useful to do this independent of the validator for tasks like:
 * Passing to tools that create fake JSON data from the schema.
 * Passing the schema to form generation tools.
 
-This crate is intended to do this for you.
 
 Example:
-
-```rust
+```
 use serde_json::json;
 use jsonref::JsonRef;
 
@@ -23,11 +21,17 @@ let mut simple_example = json!(
        );
 
 let mut jsonref = JsonRef::new();
-let dereffed = jsonref.deref_value(simple_example).unwrap();
+
+jsonref.deref_value(&mut simple_example).unwrap();
 
 let dereffed_expected = json!(
-    {"properties": {"prop1": {"title": "name"},
-     "prop2": {"title": "name", "__reference__": {}}}}
+    {"properties": 
+        {"prop1": {"title": "name"},
+         "prop2": {"title": "name"}}
+    }
 );
-assert_eq!(dereffed, dereffed_expected)
+assert_eq!(simple_example, dereffed_expected)
 ```
+
+**Note**:  If the JSONSchema has recursive `$ref` only the first recursion will happen.
+This is to stop an infinate loop.
