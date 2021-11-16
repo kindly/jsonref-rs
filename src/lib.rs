@@ -105,7 +105,7 @@ impl JsonRef {
 
     /// deref a serde_json value directly. Uses the current working directory for any relative
     /// refs.
-    pub fn deref_value(&mut self, value: &mut Value) -> Result<(), Box<dyn Error>> {
+    pub fn deref_value(&mut self, value: &mut Value) -> Result<(), Box<dyn Error + Sync + Send>> {
         let anon_file_url = format!("file://{}/anon.json", env::current_dir()?.to_string_lossy());
         self.schema_cache
             .insert(anon_file_url.clone(), value.clone());
@@ -128,7 +128,7 @@ impl JsonRef {
     /// # let file_expected: Value = serde_json::from_reader(file).unwrap();
     /// # assert_eq!(input_url, file_expected)
     /// ```
-    pub fn deref_url(&mut self, url: &str) -> Result<Value, Box<dyn Error>> {
+    pub fn deref_url(&mut self, url: &str) -> Result<Value, Box<dyn Error + Sync + Send>> {
         let mut value: Value = reqwest::blocking::get(url)?.json()?;
 
         self.schema_cache.insert(url.to_string(), value.clone());
@@ -153,7 +153,7 @@ impl JsonRef {
     /// # let file_expected: Value = serde_json::from_reader(file).unwrap();
     /// # assert_eq!(file_example, file_expected)
     /// ```
-    pub fn deref_file(&mut self, file_path: &str) -> Result<Value, Box<dyn Error>> {
+    pub fn deref_file(&mut self, file_path: &str) -> Result<Value, Box<dyn Error + Sync + Send>> {
         let file = fs::File::open(file_path)?;
         let mut value: Value = serde_json::from_reader(file)?;
         let path = PathBuf::from(file_path);
@@ -170,7 +170,7 @@ impl JsonRef {
         value: &mut Value,
         id: String,
         used_refs: &Vec<String>,
-    ) -> Result<(), Box<dyn Error>> {
+    ) -> Result<(), Box<dyn Error + Sync + Send>> {
         let mut new_id = id;
         if let Some(id_value) = value.get("$id") {
             if let Some(id_string) = id_value.as_str() {
