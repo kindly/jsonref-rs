@@ -129,7 +129,7 @@ impl JsonRef {
     /// # assert_eq!(input_url, file_expected)
     /// ```
     pub fn deref_url(&mut self, url: &str) -> Result<Value, Box<dyn Error + Sync + Send>> {
-        let mut value: Value = reqwest::blocking::get(url)?.json()?;
+        let mut value: Value = ureq::get(url).call()?.into_json()?;
 
         self.schema_cache.insert(url.to_string(), value.clone());
         self.deref(&mut value, url.to_string(), &vec![])?;
@@ -192,7 +192,7 @@ impl JsonRef {
                         Some(cached_schema) => cached_schema.clone(),
                         None => {
                             if ref_no_fragment.starts_with("http") {
-                                reqwest::blocking::get(&ref_no_fragment)?.json()?
+                                ureq::get(&ref_no_fragment).call()?.into_json()?
                             } else if ref_no_fragment.starts_with("file") {
                                 let file = fs::File::open(ref_url_no_fragment.path())?;
                                 serde_json::from_reader(file)?
