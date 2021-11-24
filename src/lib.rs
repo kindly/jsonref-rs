@@ -25,7 +25,7 @@
 //! jsonref.deref_value(&mut simple_example).unwrap();
 //!
 //! let dereffed_expected = json!(
-//!     {"properties": 
+//!     {"properties":
 //!         {"prop1": {"title": "name"},
 //!          "prop2": {"title": "name"}}
 //!     }
@@ -39,11 +39,50 @@
 use serde_json::Value;
 use std::collections::HashMap;
 use std::env;
-use std::error::Error;
 use std::fs;
 use std::mem;
 use std::path::PathBuf;
 use url::Url;
+use snafu::{Snafu, ResultExt};
+
+#[derive(Debug, Snafu)]
+pub enum Error {
+    #[snafu(display("Could not open schema from {}: {}", filename, source))]
+    SchemaFromFile {
+        filename: String,
+        source: std::io::Error,
+    },
+    #[snafu(display("Could not open schema from url {}: {}", url, source))]
+    SchemaFromUrl {
+        url: String,
+        source: ureq::Error,
+    },
+    #[snafu(display("Parse error for url {}: {}", url, source))]
+    UrlParseError {
+        url: String,
+        source: url::ParseError,
+    },
+    #[snafu(display("schema from {} not valid JSON: {}", url, source))]
+    SchemaNotJson {
+        url: String,
+        source: std::io::Error,
+    },
+    #[snafu(display("schema from {} not valid JSON: {}", url, source))]
+    SchemaNotJsonSerde {
+        url: String,
+        source: serde_json::Error,
+    },
+    #[snafu(display("json pointer {} not found", pointer))]
+    JsonPointerNotFound {
+        pointer: String,
+    },
+    #[snafu(display("{}", "Json Ref Error"))]
+    JSONRefError {
+        source: std::io::Error,
+    }
+}
+
+type Result<T, E = Error> = std::result::Result<T, E>;
 
 /// Main struct that holds configuration for a JSONScheama derefferencing.
 ///
@@ -83,7 +122,7 @@ impl JsonRef {
     ///                     "prop2": {"$ref": "#/properties/prop1", "title": "old_title"}}
     ///     }
     /// );
-    ///                                                                                          
+    ///
     /// let expected = json!(
     ///     {"properties": {"prop1": {"title": "name"},
     ///                     "prop2": {"title": "name", "__reference__": {"title": "old_title"}}}
@@ -105,8 +144,8 @@ impl JsonRef {
 
     /// deref a serde_json value directly. Uses the current working directory for any relative
     /// refs.
-    pub fn deref_value(&mut self, value: &mut Value) -> Result<(), Box<dyn Error + Sync + Send>> {
-        let anon_file_url = format!("file://{}/anon.json", env::current_dir()?.to_string_lossy());
+    pub fn deref_value(&mut self, value: &mut Value) -> Result<()> {
+        let anon_file_url = format!("file://{}/anon.json", env::current_dir().context(JSONRefError {})?.to_string_lossy());
         self.schema_cache
             .insert(anon_file_url.clone(), value.clone());
 
@@ -128,8 +167,8 @@ impl JsonRef {
     /// # let file_expected: Value = serde_json::from_reader(file).unwrap();
     /// # assert_eq!(input_url, file_expected)
     /// ```
-    pub fn deref_url(&mut self, url: &str) -> Result<Value, Box<dyn Error + Sync + Send>> {
-        let mut value: Value = ureq::get(url).call()?.into_json()?;
+    pub fn deref_url(&mut self, url: &str) -> Result<Value> {
+        let mut value: Value = ureq::get(url).call().context(SchemaFromUrl {url: url.to_owned()})?.into_json().context(SchemaNotJson {url: url.to_owned()})?;
 
         self.schema_cache.insert(url.to_string(), value.clone());
         self.deref(&mut value, url.to_string(), &vec![])?;
@@ -153,11 +192,11 @@ impl JsonRef {
     /// # let file_expected: Value = serde_json::from_reader(file).unwrap();
     /// # assert_eq!(file_example, file_expected)
     /// ```
-    pub fn deref_file(&mut self, file_path: &str) -> Result<Value, Box<dyn Error + Sync + Send>> {
-        let file = fs::File::open(file_path)?;
-        let mut value: Value = serde_json::from_reader(file)?;
+    pub fn deref_file(&mut self, file_path: &str) -> Result<Value> {
+        let file = fs::File::open(file_path).context(SchemaFromFile {filename: file_path.to_owned()})?;
+        let mut value: Value = serde_json::from_reader(file).context(SchemaNotJsonSerde {url: file_path.to_owned()})?;
         let path = PathBuf::from(file_path);
-        let absolute_path = fs::canonicalize(path)?;
+        let absolute_path = fs::canonicalize(path).context(JSONRefError {})?;
         let url = format!("file://{}", absolute_path.to_string_lossy());
 
         self.schema_cache.insert(url.clone(), value.clone());
@@ -170,7 +209,7 @@ impl JsonRef {
         value: &mut Value,
         id: String,
         used_refs: &Vec<String>,
-    ) -> Result<(), Box<dyn Error + Sync + Send>> {
+    ) -> Result<()> {
         let mut new_id = id;
         if let Some(id_value) = value.get("$id") {
             if let Some(id_string) = id_value.as_str() {
@@ -181,8 +220,8 @@ impl JsonRef {
         if let Some(obj) = value.as_object_mut() {
             if let Some(ref_value) = obj.remove("$ref") {
                 if let Some(ref_string) = ref_value.as_str() {
-                    let id_url = Url::parse(&new_id)?; //handle error
-                    let ref_url = id_url.join(ref_string)?;
+                    let id_url = Url::parse(&new_id).context(UrlParseError {url: new_id.clone()})?;
+                    let ref_url = id_url.join(ref_string).context(UrlParseError {url: ref_string.to_owned()})?;
 
                     let mut ref_url_no_fragment = ref_url.clone();
                     ref_url_no_fragment.set_fragment(None);
@@ -192,10 +231,12 @@ impl JsonRef {
                         Some(cached_schema) => cached_schema.clone(),
                         None => {
                             if ref_no_fragment.starts_with("http") {
-                                ureq::get(&ref_no_fragment).call()?.into_json()?
+                                ureq::get(&ref_no_fragment)
+                                    .call().context(SchemaFromUrl {url: ref_no_fragment.clone()})?
+                                    .into_json().context(SchemaNotJson {url: ref_no_fragment.clone()})?
                             } else if ref_no_fragment.starts_with("file") {
-                                let file = fs::File::open(ref_url_no_fragment.path())?;
-                                serde_json::from_reader(file)?
+                                let file = fs::File::open(ref_url_no_fragment.path()).context(SchemaFromFile {filename: ref_no_fragment.clone()})?;
+                                serde_json::from_reader(file).context(SchemaNotJsonSerde {url: ref_no_fragment.clone()} )?
                             } else {
                                 panic!("need url to be a file or a http based url")
                             }
@@ -210,7 +251,8 @@ impl JsonRef {
                     let ref_url_string = ref_url.to_string();
                     if let Some(ref_fragment) = ref_url.fragment() {
                         schema = schema.pointer(ref_fragment).ok_or(
-                            format!("ref `{}` can not be resolved as pointer `{}` can not be found in the schema", ref_string, ref_fragment))?.clone();
+                            Error::JsonPointerNotFound {pointer: format!("ref `{}` can not be resolved as pointer `{}` can not be found in the schema", ref_string, ref_fragment)}
+                            )?.clone();
                     }
                     if used_refs.contains(&ref_url_string) {
                         return Ok(());
